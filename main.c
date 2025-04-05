@@ -53,37 +53,14 @@ void free_matrix(int** mat, int lines)
     free(mat);
 }
 
-int check_safety(int* aval, int** need, int** alloc)
-{
-    int work[RESOURCE_COUNT];
-    for (int i=0; i<RESOURCE_COUNT; i++)
-        work[i] = aval[i];
-
-    int finish[PROCESS_COUNT] = {0};
-    
-    for (int i=0; i<PROCESS_COUNT; i++)
-    {
-        if (!(finish[i]) && leq(need[i], work, RESOURCE_COUNT))
-        {
-            for (int j=0; j<RESOURCE_COUNT; j++)
-                work[j] += alloc[i][j];
-            finish[i] = 1;
-        }
-    }
-
-    return sum(finish, PROCESS_COUNT)==PROCESS_COUNT;
-}
-
-
-
 int main()
 {
     // Доступные ресурсы
     int* available = (int*)calloc(RESOURCE_COUNT, sizeof(int));
-    available[0] = 2;
-    available[1] = 5;
-    available[2] = 7;
-    available[3] = 3;
+    // available[0] = 2;
+    // available[1] = 5;
+    // available[2] = 7;
+    // available[3] = 3;
 
     // Запрашиваемые ресурсы
     int** need = (int**)calloc(PROCESS_COUNT, sizeof(int*));
@@ -94,23 +71,59 @@ int main()
     int** allocated = (int**)calloc(PROCESS_COUNT, sizeof(int*));
     for (int i=0; i<PROCESS_COUNT; i++)
         allocated[i] = (int*)calloc(RESOURCE_COUNT, sizeof(int));
- 
+    
+    // Запрашиваемые ресурсы
+    int** requested = (int**)calloc(PROCESS_COUNT, sizeof(int*));
     for (int i=0; i<PROCESS_COUNT; i++)
-        for (int j=0; j<RESOURCE_COUNT; j++)
-            allocated[i][j] = rand()%30+1;
+        requested[i] = (int*)calloc(RESOURCE_COUNT, sizeof(int));
 
-    print_matrix(allocated, PROCESS_COUNT, RESOURCE_COUNT);
+    // Копируем доступные ресурсы в массив рабочих ресурсов
+    int work[RESOURCE_COUNT];
+    for (int i=0; i<RESOURCE_COUNT; i++)
+        work[i] = available[i];
 
-    // int running = 1;
-    // while (running)
-    // {
+    // Обозначаем завершённые процессы
+    int finish[PROCESS_COUNT] = {0};
+    
+    int running = 1;
 
-    // }
+    // Основной цикл алгоритма
+    for (int k=0; k<PROCESS_COUNT && running; k++)
+        for (int i=0; i<PROCESS_COUNT && running; i++)
+        {
+            if (!(finish[i]) && leq(need[i], work, RESOURCE_COUNT))
+            {
+                for (int j=0; j<RESOURCE_COUNT; j++)
+                {
+                    work[j] += allocated[i][j];
+                    allocated[i][j] = 0;
+                }
+                finish[i] = 1;
+                printf("Завершён процесс %d\n", i);
+
+                printf("\nДоступные ресурсы: \n");
+                print_vec(available, RESOURCE_COUNT);
+                printf("\nНеобходимые в работе ресурсы:\n");
+                print_matrix(need, PROCESS_COUNT, RESOURCE_COUNT);
+                printf("\nВыделенные заранее ресурсы: \n");
+                print_matrix(allocated, PROCESS_COUNT, RESOURCE_COUNT);                 
+            }
+
+            if (sum(finish, PROCESS_COUNT) < PROCESS_COUNT)
+            {
+                printf("Исходное состояние безопасно\n");
+                running = 0;
+            }
+        }
+
+    if (running)
+    printf("Исходное состояние небезопасно\n");
 
     // Чистим память
     free(available);
-    free(allocated);
-    free(need);
+    free_matrix(allocated, PROCESS_COUNT);
+    free_matrix(need, PROCESS_COUNT);
+    free_matrix(requested, PROCESS_COUNT);
 
     return 0;
 }

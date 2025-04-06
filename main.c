@@ -15,6 +15,14 @@ int leq(int* a, int *b, int size)
     return 1;
 }
 
+int eq(int* a, int*b, int size)
+{
+    for (int i=0; i<size; i++)
+        if (a[i] != b[i])
+            return 0;
+    return 1;
+}
+
 int sum(int* vec, int size)
 {
     int res = 0;
@@ -53,6 +61,97 @@ void free_matrix(int** mat, int lines)
     free(mat);
 }
 
+void realloc_res(int* available, int* need, int* allocated, int* requested)
+{
+    // Вместо аварийного завершения при избыточном запросе выделяется не больше, чем нужно
+    if (leq(requested, need, RESOURCE_COUNT))
+    {
+        if (leq(requested, available, RESOURCE_COUNT))
+        {
+            for(int i=0; i<RESOURCE_COUNT; i++)
+            {
+                available[i] -= requested[i];
+                allocated[i] += requested[i];
+                need[i] -= requested[i];
+            }
+        }
+    }
+    else
+    {
+        for(int i=0; i<RESOURCE_COUNT; i++)
+        {
+            available[i] -= need[i];
+            allocated[i] += need[i];
+            need[i] -= need[i];
+        }
+    }
+}
+
+void check_status(int* available, int** need, int** allocated)
+{
+    // Копируем доступные ресурсы в массив рабочих ресурсов
+    int work[RESOURCE_COUNT];
+    for (int i=0; i<RESOURCE_COUNT; i++)
+        work[i] = available[i];
+
+    // Обозначаем завершённые процессы
+    int finish[PROCESS_COUNT] = {0};
+    int prev[PROCESS_COUNT] = {0};
+
+    // Бегаем по процессам
+    int index = 0;
+    while (index > -1)
+    {
+        if (!finish[index])
+        {
+            if (!eq(finish, prev, PROCESS_COUNT))
+            {
+                // Выводим состояние
+                printf("Текущее состояние системы:\n");
+                printf("\nДоступные ресурсы: \n");
+                print_vec(available, RESOURCE_COUNT);
+                printf("\nНеобходимые в работе ресурсы:\n");
+                print_matrix(need, PROCESS_COUNT, RESOURCE_COUNT);
+                printf("\nВыделенные заранее ресурсы: \n");
+                print_matrix(allocated, PROCESS_COUNT, RESOURCE_COUNT);
+
+                // Запрашиваем ресурсы
+                int req[RESOURCE_COUNT];
+                printf("Введите вектор запрашиваемых для процесса %d ресурсов: ", index);
+                for (int i=0; i<RESOURCE_COUNT; i++)
+                    scanf_s("%d", &req[index]);
+                
+                // Выделяем ресурсы
+                realloc_res(&work, need[index], allocated[index], &req);
+                for (int j=0; j<RESOURCE_COUNT; j++)
+                {
+                    work[j] += allocated[index][j];
+                    allocated[index][j] = 0;
+                }
+
+                //Завершаем процесс
+                finish[index] = 0;
+                printf("Процесс %d завершён\n", index);
+
+                // Сохраняем состояние
+                for (int j=0; j<PROCESS_COUNT; j++)
+                    prev[j] = finish[j];
+
+                index = (index+1)%PROCESS_COUNT;
+            }
+            else
+            {
+                index = -1;
+                fputs("Состояние небезопасно, работа программы окончена\n", stdout);
+            }
+        }
+    }
+    
+
+    if (index != -1)
+        printf("Исходное состояние небезопасно\n");
+}
+
 int main()
 {
     // Доступные ресурсы
@@ -71,59 +170,13 @@ int main()
     int** allocated = (int**)calloc(PROCESS_COUNT, sizeof(int*));
     for (int i=0; i<PROCESS_COUNT; i++)
         allocated[i] = (int*)calloc(RESOURCE_COUNT, sizeof(int));
-    
-    // Запрашиваемые ресурсы
-    int** requested = (int**)calloc(PROCESS_COUNT, sizeof(int*));
-    for (int i=0; i<PROCESS_COUNT; i++)
-        requested[i] = (int*)calloc(RESOURCE_COUNT, sizeof(int));
 
-    // Копируем доступные ресурсы в массив рабочих ресурсов
-    int work[RESOURCE_COUNT];
-    for (int i=0; i<RESOURCE_COUNT; i++)
-        work[i] = available[i];
-
-    // Обозначаем завершённые процессы
-    int finish[PROCESS_COUNT] = {0};
-    
-    int running = 1;
-
-    // Основной цикл алгоритма
-    for (int k=0; k<PROCESS_COUNT && running; k++)
-        for (int i=0; i<PROCESS_COUNT && running; i++)
-        {
-            if (!(finish[i]) && leq(need[i], work, RESOURCE_COUNT))
-            {
-                for (int j=0; j<RESOURCE_COUNT; j++)
-                {
-                    work[j] += allocated[i][j];
-                    allocated[i][j] = 0;
-                }
-                finish[i] = 1;
-                printf("Завершён процесс %d\n", i);
-
-                printf("\nДоступные ресурсы: \n");
-                print_vec(available, RESOURCE_COUNT);
-                printf("\nНеобходимые в работе ресурсы:\n");
-                print_matrix(need, PROCESS_COUNT, RESOURCE_COUNT);
-                printf("\nВыделенные заранее ресурсы: \n");
-                print_matrix(allocated, PROCESS_COUNT, RESOURCE_COUNT);                 
-            }
-
-            if (sum(finish, PROCESS_COUNT) < PROCESS_COUNT)
-            {
-                printf("Исходное состояние безопасно\n");
-                running = 0;
-            }
-        }
-
-    if (running)
-    printf("Исходное состояние небезопасно\n");
+    check_status(available, need, allocated);
 
     // Чистим память
     free(available);
     free_matrix(allocated, PROCESS_COUNT);
     free_matrix(need, PROCESS_COUNT);
-    free_matrix(requested, PROCESS_COUNT);
 
     return 0;
 }

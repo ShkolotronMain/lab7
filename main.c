@@ -61,9 +61,9 @@ void free_matrix(int** mat, int lines)
     free(mat);
 }
 
-void realloc_res(int* available, int* need, int* allocated, int* requested)
+int realloc_res(int* available, int* need, int* allocated, int* requested)
 {
-    // Вместо аварийного завершения при избыточном запросе выделяется не больше, чем нужно
+    // Вместо аварийного завершения при избыточном запросе ресурсы вообще не выделятся
     if (leq(requested, need, RESOURCE_COUNT))
     {
         if (leq(requested, available, RESOURCE_COUNT))
@@ -74,20 +74,13 @@ void realloc_res(int* available, int* need, int* allocated, int* requested)
                 allocated[i] += requested[i];
                 need[i] -= requested[i];
             }
+            return 1;
         }
     }
-    else
-    {
-        for(int i=0; i<RESOURCE_COUNT; i++)
-        {
-            available[i] -= need[i];
-            allocated[i] += need[i];
-            need[i] -= need[i];
-        }
-    }
+    return 0;
 }
 
-void check_status(int* available, int** need, int** allocated)
+void check_status(int* available, int** need, int** allocated, int** max)
 {
     // Копируем доступные ресурсы в массив рабочих ресурсов
     int work[RESOURCE_COUNT];
@@ -96,7 +89,6 @@ void check_status(int* available, int** need, int** allocated)
 
     // Обозначаем завершённые процессы
     int finish[PROCESS_COUNT] = {0};
-    int prev[PROCESS_COUNT] = {0};
 
     // Бегаем по процессам
     int index = 0;
@@ -104,46 +96,66 @@ void check_status(int* available, int** need, int** allocated)
     {
         if (!finish[index])
         {
-            if (!eq(finish, prev, PROCESS_COUNT))
-            {
-                // Выводим состояние
-                printf("Текущее состояние системы:\n");
-                printf("\nДоступные ресурсы: \n");
-                print_vec(available, RESOURCE_COUNT);
-                printf("\nНеобходимые в работе ресурсы:\n");
-                print_matrix(need, PROCESS_COUNT, RESOURCE_COUNT);
-                printf("\nВыделенные заранее ресурсы: \n");
-                print_matrix(allocated, PROCESS_COUNT, RESOURCE_COUNT);
+            // Выводим состояние
+            printf("Текущее состояние системы:\n");
+            printf("\nДоступные ресурсы: \n");
+            print_vec(work, RESOURCE_COUNT);
+            printf("\nНеобходимые в работе ресурсы:\n");
+            print_matrix(need, PROCESS_COUNT, RESOURCE_COUNT);
+            printf("\nВыделенные заранее ресурсы: \n");
+            print_matrix(allocated, PROCESS_COUNT, RESOURCE_COUNT);
 
-                // Запрашиваем ресурсы
-                int req[RESOURCE_COUNT];
-                printf("Введите вектор запрашиваемых для процесса %d ресурсов: ", index);
-                for (int i=0; i<RESOURCE_COUNT; i++)
-                    scanf_s("%d", &req[index]);
-                
-                // Выделяем ресурсы
-                realloc_res(&work, need[index], allocated[index], &req);
+            // Запрашиваем ресурсы
+            int req[RESOURCE_COUNT];
+            for (int k=0; k<RESOURCE_COUNT; k++)
+                req[k] = need[index][k];
+            // printf("Введите вектор запрашиваемых для процесса %d ресурсов: ", index);
+            // for (int i=0; i<RESOURCE_COUNT; i++)
+            // {
+            //     int buf = 0;
+            //     scanf_s("%d", &buf);
+            //     req[i] = buf;
+            // }
+            
+            // Выделяем ресурсы
+            printf("Выделение процессу %d ресурсов: ", index);
+            print_vec(req, RESOURCE_COUNT);
+            int reallocated = realloc_res(work, need[index], allocated[index], req);
+            
+            // Чекаем
+            if (leq(max[index], allocated[index], RESOURCE_COUNT))
+            {
                 for (int j=0; j<RESOURCE_COUNT; j++)
                 {
                     work[j] += allocated[index][j];
                     allocated[index][j] = 0;
+                    need[index][j] = 0;
                 }
 
                 //Завершаем процесс
-                finish[index] = 0;
+                finish[index] = 1;
                 printf("Процесс %d завершён\n", index);
 
-                // Сохраняем состояние
-                for (int j=0; j<PROCESS_COUNT; j++)
-                    prev[j] = finish[j];
-
-                index = (index+1)%PROCESS_COUNT;
+                if (sum(finish, PROCESS_COUNT) == PROCESS_COUNT)
+                {
+                    index = -2;
+                    fputs("Состояние системы и последовательность безопасны", stdout);
+                }
             }
             else
             {
-                index = -1;
-                fputs("Состояние небезопасно, работа программы окончена\n", stdout);
+                fputs("Такое состояние системы небезопасно, откат\n", stdout);
+                
+                if (reallocated)
+                    for(int i=0; i<RESOURCE_COUNT; i++)
+                    {
+                        work[i] += req[i];
+                        allocated[index][i] -= req[i];
+                        need[index][i] += req[i];
+                    }
             }
+
+            index = (index+1)%PROCESS_COUNT;
         }
     }
     
@@ -156,10 +168,11 @@ int main()
 {
     // Доступные ресурсы
     int* available = (int*)calloc(RESOURCE_COUNT, sizeof(int));
-    // available[0] = 2;
-    // available[1] = 5;
-    // available[2] = 7;
-    // available[3] = 3;
+
+    // Необходимые для завершения ресурсы
+    int** max = (int**)calloc(PROCESS_COUNT, sizeof(int*));
+    for (int i=0; i<PROCESS_COUNT; i++)
+        max[i] = (int*)calloc(RESOURCE_COUNT, sizeof(int));
 
     // Запрашиваемые ресурсы
     int** need = (int**)calloc(PROCESS_COUNT, sizeof(int*));
@@ -171,10 +184,56 @@ int main()
     for (int i=0; i<PROCESS_COUNT; i++)
         allocated[i] = (int*)calloc(RESOURCE_COUNT, sizeof(int));
 
-    check_status(available, need, allocated);
+    /// СЕКЦИЯ ТЕСТОВЫХ ДАННЫХ
+
+    available[0] = 2;
+    available[1] = 5;
+    available[2] = 7;
+    available[3] = 3;
+
+    int tmax[PROCESS_COUNT][RESOURCE_COUNT] = 
+    {
+        {3, 1, 4, 5}, 
+        {1, 5, 3, 2}, 
+        {2, 4, 6, 1}, 
+        {0, 0, 7, 0}, 
+        {1, 7, 3, 3}
+    };
+
+    int tneed[PROCESS_COUNT][RESOURCE_COUNT] = 
+    {
+        {3, 0, 4, 1}, 
+        {0, 2, 2, 1}, 
+        {2, 3, 6, 0}, 
+        {0, 0, 6, 0}, 
+        {1, 6, 0, 1}
+    };
+
+    int tallocated[PROCESS_COUNT][RESOURCE_COUNT] = 
+    {
+        {0, 1, 0, 4}, 
+        {1, 3, 1, 1}, 
+        {0, 1, 0, 1}, 
+        {0, 0, 1, 0}, 
+        {0, 1, 3, 2}
+    };
+
+    /// СЕКЦИЯ ТЕСТОВЫХ ДАННЫХ
+
+    // Копируем тестовые данные
+    for (int i=0; i<PROCESS_COUNT; i++)
+        for (int j=0; j<RESOURCE_COUNT; j++)
+        {
+            max[i][j] = tmax[i][j];
+            need[i][j] = tneed[i][j];
+            allocated[i][j] = tallocated[i][j];
+        }
+
+    check_status(available, need, allocated, max);
 
     // Чистим память
     free(available);
+    free_matrix(max, PROCESS_COUNT);
     free_matrix(allocated, PROCESS_COUNT);
     free_matrix(need, PROCESS_COUNT);
 

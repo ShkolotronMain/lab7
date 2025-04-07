@@ -89,6 +89,7 @@ void check_status(int* available, int** need, int** allocated, int** max)
 
     // Обозначаем завершённые процессы
     int finish[PROCESS_COUNT] = {0};
+    int state[PROCESS_COUNT] = {0};
 
     // Бегаем по процессам
     int index = 0;
@@ -107,8 +108,10 @@ void check_status(int* available, int** need, int** allocated, int** max)
 
             // Запрашиваем ресурсы
             int req[RESOURCE_COUNT];
+
             for (int k=0; k<RESOURCE_COUNT; k++)
                 req[k] = need[index][k];
+
             // printf("Введите вектор запрашиваемых для процесса %d ресурсов: ", index);
             // for (int i=0; i<RESOURCE_COUNT; i++)
             // {
@@ -154,8 +157,19 @@ void check_status(int* available, int** need, int** allocated, int** max)
                         need[index][i] += req[i];
                     }
             }
+        }
 
-            index = (index+1)%PROCESS_COUNT;
+        index = (index+1)%PROCESS_COUNT;
+
+        if (index == PROCESS_COUNT-1)
+        {
+            if (!eq(finish, state, PROCESS_COUNT))
+            {
+                for (int i=0; i<PROCESS_COUNT; i++)
+                    state[i] = finish[i];
+            }
+            else
+                index = -2;
         }
     }
     
@@ -194,19 +208,19 @@ int main()
     int tmax[PROCESS_COUNT][RESOURCE_COUNT] = 
     {
         {3, 1, 4, 5}, 
-        {1, 5, 3, 2}, 
+        {6, 5, 3, 5}, 
         {2, 4, 6, 1}, 
-        {0, 0, 7, 0}, 
-        {1, 7, 3, 3}
+        {4, 0, 7, 0}, 
+        {1, 7, 5, 3}
     };
 
     int tneed[PROCESS_COUNT][RESOURCE_COUNT] = 
     {
         {3, 0, 4, 1}, 
-        {0, 2, 2, 1}, 
+        {6, 2, 2, 4}, 
         {2, 3, 6, 0}, 
-        {0, 0, 6, 0}, 
-        {1, 6, 0, 1}
+        {4, 0, 6, 0}, 
+        {1, 6, 2, 1}
     };
 
     int tallocated[PROCESS_COUNT][RESOURCE_COUNT] = 
